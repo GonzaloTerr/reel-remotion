@@ -13,11 +13,10 @@ export const RemotionRoot: React.FC = () => {
       width={1080}
       height={1920}
       defaultProps={{
-        texto: 'Tus precios se actualizan solos',
+        texto: 'Actualizás precios a mano y te come horas | Varka los actualiza solos, sin planillas',
         hashtags: '#automatizacion #pymes #IA #varka',
-        imagen:
-          'https://images.unsplash.com/photo-1551434678-e076c223a692?w=1080',
-        musicFile: '',
+        imagen: 'https://images.unsplash.com/photo-1556745757-8d76bdb6984b?w=1080',
+        musicFile: 'prettyjohn1-no-copyright-music-498106.mp3',
         variant: 0,
       }}
     />
