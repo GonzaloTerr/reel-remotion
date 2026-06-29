@@ -1,0 +1,25 @@
+{
+  "name": "reel-remotion",
+  "version": "1.0.0",
+  "description": "Microservicio que renderiza reels verticales (1080x1920) con Remotion. 4 plantillas que rotan + musica rotativa. Reemplaza a Creatomate.",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "studio": "remotion studio",
+    "render": "remotion render Reel out/reel.mp4"
+  },
+  "dependencies": {
+    "@remotion/bundler": "^4.0.0",
+    "@remotion/renderer": "^4.0.0",
+    "@supabase/supabase-js": "^2.45.0",
+    "express": "^4.19.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "remotion": "^4.0.0"
+  },
+  "devDependencies": {
+    "@remotion/cli": "^4.0.0",
+    "@types/react": "^18.3.1",
+    "typescript": "^5.5.0"
+  }
+}
