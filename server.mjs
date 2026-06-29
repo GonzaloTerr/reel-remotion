@@ -1,6 +1,6 @@
 // Microservicio de render. POST /render { texto, imagen, hashtags?, variant?, music? }
-// -> elige variante + musica al azar, renderiza el reel, lo sube a Supabase Storage y
-//    devuelve { url }. Renders serializados (1 a la vez) para cuidar la RAM del VPS.
+// -> elige variante + musica al azar, renderiza el reel y DEVUELVE el MP4 directo
+//    (binario, sin storage externo). Renders serializados (1 a la vez) por la RAM.
 import express from 'express';
 import path from 'path';
 import os from 'os';
@@ -8,13 +8,9 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { bundle } from '@remotion/bundler';
 import { selectComposition, renderMedia, ensureBrowser } from '@remotion/renderer';
-import { createClient } from '@supabase/supabase-js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 8080;
-const BUCKET = process.env.SUPABASE_BUCKET || 'reels';
-
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
 const app = express();
 app.use(express.json({ limit: '2mb' }));
@@ -48,23 +44,19 @@ app.post('/render', async (req, res) => {
     const composition = await selectComposition({ serveUrl, id: 'Reel', inputProps });
     const out = path.join(os.tmpdir(), `reel-${Date.now()}.mp4`);
     await renderMedia({ composition, serveUrl, codec: 'h264', outputLocation: out, inputProps, concurrency: 1 });
-
-    const buf = fs.readFileSync(out);
-    const fileName = `reel-${Date.now()}.mp4`;
-    const up = await supabase.storage.from(BUCKET).upload(fileName, buf, {
-      contentType: 'video/mp4',
-      upsert: true,
-    });
-    fs.unlink(out, () => {});
-    if (up.error) throw new Error('Supabase upload: ' + up.error.message);
-
-    const { data } = supabase.storage.from(BUCKET).getPublicUrl(fileName);
-    return { url: data.publicUrl, variant: v, music: musicFile };
+    return { out, v, musicFile };
   });
   lock = run.catch(() => {}); // el lock sigue vivo aunque un render falle
 
   try {
-    res.json(await run);
+    const { out, v, musicFile } = await run;
+    const buf = fs.readFileSync(out);
+    fs.unlink(out, () => {});
+    res.setHeader('Content-Type', 'video/mp4');
+    res.setHeader('Content-Disposition', 'attachment; filename="reel.mp4"');
+    res.setHeader('X-Reel-Variant', String(v));
+    res.setHeader('X-Reel-Music', musicFile || 'none');
+    res.send(buf);
   } catch (e) {
     console.error('render error:', e);
     res.status(500).json({ error: String(e?.message || e) });
