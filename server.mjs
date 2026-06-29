@@ -1,9 +1,9 @@
 // Microservicio de render. POST /render { texto, imagen, hashtags?, variant?, music? }
-// -> elige variante + musica al azar, renderiza el reel y DEVUELVE el MP4 directo
-//    (binario, sin storage externo). Renders serializados (1 a la vez) por la RAM.
+// -> elige variante + musica al azar, renderiza el reel, lo GUARDA y lo SIRVE en una
+//    URL publica propia (/renders/...). Devuelve { url }. Sin storage externo ni claves.
+//    Renders serializados (1 a la vez) por la RAM.
 import express from 'express';
 import path from 'path';
-import os from 'os';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { bundle } from '@remotion/bundler';
@@ -11,9 +11,12 @@ import { selectComposition, renderMedia, ensureBrowser } from '@remotion/rendere
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 8080;
+const RENDERS_DIR = path.join(__dirname, 'renders');
+fs.mkdirSync(RENDERS_DIR, { recursive: true });
 
 const app = express();
 app.use(express.json({ limit: '2mb' }));
+app.use('/renders', express.static(RENDERS_DIR)); // sirve los MP4 publicamente
 
 let serveUrl = null;
 let lock = Promise.resolve(); // mutex: 1 render a la vez
@@ -28,6 +31,17 @@ function musicaDisponible() {
   }
 }
 
+// Borra renders de mas de 2 horas (ya fueron publicados; evita llenar el disco)
+function limpiarViejos() {
+  const limite = Date.now() - 2 * 60 * 60 * 1000;
+  try {
+    for (const f of fs.readdirSync(RENDERS_DIR)) {
+      const fp = path.join(RENDERS_DIR, f);
+      if (fs.statSync(fp).mtimeMs < limite) fs.unlinkSync(fp);
+    }
+  } catch {}
+}
+
 app.get('/', (_req, res) => res.json({ status: 'ok', bundled: !!serveUrl }));
 
 app.post('/render', async (req, res) => {
@@ -36,27 +50,24 @@ app.post('/render', async (req, res) => {
   if (!serveUrl) return res.status(503).json({ error: 'bundle todavia no esta listo' });
 
   const run = lock.then(async () => {
+    limpiarViejos();
     const pistas = musicaDisponible();
     const musicFile = music || (pistas.length ? pistas[Math.floor(Math.random() * pistas.length)] : '');
     const v = Number.isInteger(variant) ? variant : Math.floor(Math.random() * 4);
     const inputProps = { texto, hashtags, imagen, musicFile, variant: v };
 
     const composition = await selectComposition({ serveUrl, id: 'Reel', inputProps });
-    const out = path.join(os.tmpdir(), `reel-${Date.now()}.mp4`);
+    const fileName = `reel-${Date.now()}.mp4`;
+    const out = path.join(RENDERS_DIR, fileName);
     await renderMedia({ composition, serveUrl, codec: 'h264', outputLocation: out, inputProps, concurrency: 1 });
-    return { out, v, musicFile };
+    return { fileName, v, musicFile };
   });
   lock = run.catch(() => {}); // el lock sigue vivo aunque un render falle
 
   try {
-    const { out, v, musicFile } = await run;
-    const buf = fs.readFileSync(out);
-    fs.unlink(out, () => {});
-    res.setHeader('Content-Type', 'video/mp4');
-    res.setHeader('Content-Disposition', 'attachment; filename="reel.mp4"');
-    res.setHeader('X-Reel-Variant', String(v));
-    res.setHeader('X-Reel-Music', musicFile || 'none');
-    res.send(buf);
+    const { fileName, v, musicFile } = await run;
+    const base = process.env.PUBLIC_URL || 'https://' + req.get('host');
+    res.json({ url: `${base}/renders/${fileName}`, variant: v, music: musicFile });
   } catch (e) {
     console.error('render error:', e);
     res.status(500).json({ error: String(e?.message || e) });
