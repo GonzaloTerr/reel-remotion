@@ -7,7 +7,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { bundle } from '@remotion/bundler';
-import { selectComposition, renderMedia, ensureBrowser } from '@remotion/renderer';
+import { selectComposition, renderMedia, renderStill, ensureBrowser } from '@remotion/renderer';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 8080;
@@ -70,6 +70,55 @@ app.post('/render', async (req, res) => {
     res.json({ url: `${base}/renders/${fileName}`, variant: v, music: musicFile });
   } catch (e) {
     console.error('render error:', e);
+    res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
+// Carrusel de Instagram: renderiza cada slide como imagen fija (4:5, 1080x1350).
+// Body: { slides: [{ kind:'cover'|'content'|'cta', titulo, cuerpo? }], imagen }
+// -> { urls: [...] } en el mismo orden. La foto (imagen) se usa de fondo en la portada.
+app.post('/render-carousel', async (req, res) => {
+  const { slides, imagen } = req.body || {};
+  if (!Array.isArray(slides) || slides.length === 0) return res.status(400).json({ error: 'faltan slides' });
+  if (!imagen) return res.status(400).json({ error: 'falta imagen' });
+  if (!serveUrl) return res.status(503).json({ error: 'bundle todavia no esta listo' });
+
+  const total = slides.filter((s) => s.kind === 'content').length || slides.length;
+
+  const run = lock.then(async () => {
+    limpiarViejos();
+    const v = Math.floor(Math.random() * 4);
+    const stamp = Date.now();
+    const urls = [];
+    let contentIdx = 0;
+    for (let i = 0; i < slides.length; i++) {
+      const s = slides[i] || {};
+      if (s.kind === 'content') contentIdx++;
+      const inputProps = {
+        kind: s.kind || 'content',
+        titulo: s.titulo || '',
+        cuerpo: s.cuerpo || '',
+        imagen,
+        index: contentIdx,
+        total,
+        variant: v,
+      };
+      const composition = await selectComposition({ serveUrl, id: 'Slide', inputProps });
+      const fileName = `slide-${stamp}-${i + 1}.jpg`;
+      const out = path.join(RENDERS_DIR, fileName);
+      await renderStill({ composition, serveUrl, output: out, inputProps, imageFormat: 'jpeg', jpegQuality: 90 });
+      urls.push(fileName);
+    }
+    return { urls, v };
+  });
+  lock = run.catch(() => {});
+
+  try {
+    const { urls, v } = await run;
+    const base = process.env.PUBLIC_URL || 'https://' + req.get('host');
+    res.json({ urls: urls.map((f) => `${base}/renders/${f}`), variant: v });
+  } catch (e) {
+    console.error('carousel error:', e);
     res.status(500).json({ error: String(e?.message || e) });
   }
 });
