@@ -78,11 +78,10 @@ export const Slide: React.FC<SlideProps> = ({ kind, titulo, cuerpo, imagen, inde
         <AbsoluteFill>
           <Img
             src={imagen}
-            style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'blur(2px) brightness(0.5) saturate(1.1)', transform: 'scale(1.1)' }}
+            style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'saturate(1.05)', transform: 'scale(1.02)' }}
           />
         </AbsoluteFill>
-        <AbsoluteFill style={{ background: 'linear-gradient(180deg, rgba(8,22,15,0.55) 0%, rgba(8,22,15,0.35) 45%, rgba(8,22,15,0.92) 100%)' }} />
-        <Glow x={540} y={520} size={760} color={`${BRAND.green}40`} />
+        <AbsoluteFill style={{ background: 'linear-gradient(180deg, rgba(8,22,15,0.5) 0%, rgba(8,22,15,0.04) 34%, rgba(8,22,15,0.12) 58%, rgba(8,22,15,0.72) 80%, rgba(8,22,15,0.96) 100%)' }} />
         <AbsoluteFill style={{ padding: 80, justifyContent: 'space-between' }}>
           <Logo size={40} />
           <div>
