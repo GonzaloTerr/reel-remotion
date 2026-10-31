@@ -1,64 +1,67 @@
-# reel-remotion — render de reels propio (reemplaza Creatomate)
+# reel-remotion
 
-Microservicio que renderiza **reels verticales 1080x1920** con [Remotion](https://www.remotion.dev).
-Sin créditos: vos renderizás en tu VPS. **4 plantillas que rotan** + **música rotativa**.
+A small self-hosted service that renders vertical videos (1080x1920) and carousel images from an HTTP request, built with [Remotion](https://www.remotion.dev). I built it for my own Instagram content, to stop paying per render on a hosted video API.
 
-```
-n8n (texto de Claude + imagen Unsplash)
-  --> POST /render { texto, imagen, hashtags }
-        - elige variante (0-3) y musica al azar
-        - renderiza el MP4
-        - lo sube a Supabase Storage
-        - responde { url }
-  --> n8n sigue: YouTube -> Make publica el reel
-```
+An automation sends a text and an image, the service renders the result and returns a URL.
 
-## Endpoint
+## Built with
 
-`POST /render`
-```json
-{
-  "texto": "Tus precios se actualizan solos",
-  "hashtags": "#automatizacion #pymes #IA #varka",
-  "imagen": "https://images.unsplash.com/...",
-  "variant": 2,        // opcional: 0-3. Si no lo mandás, elige al azar.
-  "music": "calm.mp3"  // opcional: forzar una pista. Si no, elige al azar.
-}
-```
-Respuesta: `{ "url": "https://...supabase.../reel-123.mp4", "variant": 2, "music": "calm.mp3" }`
+Node.js, Express, React, TypeScript, Remotion and Docker.
 
-`GET /` -> health check.
+## Run it locally
 
-## Las 4 plantillas (variantes)
-- **0** — Centro oscuro: overlay oscuro, texto grande centrado.
-- **1** — Banda inferior: imagen arriba, banda verde marca abajo con el texto.
-- **2** — Minimal abajo: degradé fuerte, texto abajo a la izquierda.
-- **3** — Tinte verde: imagen con tinte de marca, texto arriba.
-
-Todas con: logo Varka, zoom lento del fondo (Ken Burns), animación de entrada del texto, hashtags abajo y música.
-
-## Local (probar / diseñar)
 ```bash
 npm install
-npm run studio     # abre Remotion Studio para ver/editar las variantes
-npm run render     # renderiza un reel de prueba a out/reel.mp4
+npm run studio     # opens Remotion Studio to view and edit the templates
+npm run render     # renders a test video to out/reel.mp4
+npm start          # starts the HTTP server on port 8080
 ```
 
-## Deploy en EasyPanel (VPS)
-1. **Supabase:** creá un bucket **público** llamado `reels` (Storage -> New bucket -> Public).
-2. Subí esta carpeta a un repo (ej. GitHub privado).
-3. En EasyPanel: **App nueva** -> Source = GitHub -> Build = **Dockerfile**.
-4. **Environment:** pegá las vars del `.env.example` (SUPABASE_URL, SUPABASE_SERVICE_KEY, SUPABASE_BUCKET, PORT).
-5. **Domains:** Container Port = **8080**.
-6. Deploy. El log debe decir "Bundle Remotion listo." y "Render server escuchando en :8080".
+## Endpoints
 
-> El primer build tarda (descarga el navegador headless). Render de un reel de 15s: ~1-3 min según el VPS.
+`GET /` is the health check. It returns `{ "status": "ok", "bundled": true }`.
 
-## Música
-Poné pistas royalty-free en `public/music/` (ver el README de esa carpeta). Vacía = reel sin música.
+`POST /render` renders a 15-second video:
 
-## RAM
-El render usa Chromium headless (pesado). Está configurado a **concurrencia 1** y los renders se **serializan** (1 a la vez) para no reventar el VPS. Para 1-3 reels/semana va sobrado. Si el VPS queda corto de RAM, conviene Remotion Lambda (AWS).
+```json
+{
+  "texto": "Pain point | Solution",
+  "imagen": "https://example.com/background.jpg",
+  "hashtags": "#automation #ai",
+  "variant": 2,
+  "music": "track.mp3"
+}
+```
 
-## Licencia Remotion
-Gratis para individuos y equipos chicos (≤3 personas). Si Varka crece, revisar la licencia de empresa de Remotion.
+`variant` (0 to 3) and `music` are optional: if you leave them out, the service picks one at random. It returns `{ "url", "variant", "music" }`.
+
+`POST /render-carousel` renders 4:5 images:
+
+```json
+{
+  "imagen": "https://example.com/background.jpg",
+  "slides": [
+    { "kind": "cover", "titulo": "Title" },
+    { "kind": "content", "titulo": "Point", "cuerpo": "Details" },
+    { "kind": "cta", "titulo": "Call to action" }
+  ]
+}
+```
+
+Rendered files are served by the service itself and deleted automatically after a while.
+
+## Deploy
+
+The repository includes a `Dockerfile`. Build it, expose the container on port 8080 and set the variables from `.env.example`. The first build downloads a headless browser, so it takes a while.
+
+Rendering uses headless Chromium, which needs a lot of memory, so renders run one at a time with concurrency 1.
+
+## Plans
+
+See [ROADMAP.md](ROADMAP.md).
+
+## License
+
+The code in this repository is under the [MIT License](LICENSE).
+
+The music tracks in `public/music/` are third-party files and are not covered by the MIT License: each one keeps the license of its author. Remotion, a dependency, has [its own license](https://www.remotion.dev/license), which is free for individuals and small teams.
